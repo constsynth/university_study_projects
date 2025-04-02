@@ -11,11 +11,7 @@
 import math
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from scipy import stats
-import statsmodels.api as sm
 import matplotlib.pyplot as plt
-from statsmodels.stats.outliers_influence import variance_inflation_factor
 ```
 
 В ходе выполнения лабораторной работы 5 получили следующее уравнение множественной регрессии: `y = 0.5259 * x1 + 0.1592 * x2 + 2.0509`
@@ -25,10 +21,12 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 ```python
 def lr_predict(
-        data: pd.DataFrame,
-        x1_x2_columns_names: list[str] = ['x1', 'x2']) -> list[float]:
-    features = data[x1_x2_columns_names]
-    predict = 0.5259 * features['x1'] + 0.1592 * features['x2'] + 2.0509
+    data: pd.DataFrame,
+    x1_column_name: str = 'x1',
+    x2_column_name: str = 'x2'
+    ) -> list[float]:
+    x1, x2 = data[x1_column_name], data[x2_column_name]
+    predict = 0.5259 * x1 + 0.1592 * x2 + 2.0509
     return predict
 ```
 
@@ -36,10 +34,12 @@ def lr_predict(
 ```python
 def get_residuals(
     data: pd.DataFrame,
-    x1_x2_columns_names: list[str] = ['x1', 'x2'],
-    target_column_name: str = 'y') -> list[float]:
+    x1_column_name: str = 'x1',
+    x2_column_name: str = 'x2',
+    target_column_name: str = 'y'
+    ) -> list[float]:
     targets = data[target_column_name]
-    residuals = targets - lr_predict(data, x1_x2_columns_names)
+    residuals = targets - lr_predict(data, x1_column_name, x2_column_name)
     return residuals
 ```
 
@@ -199,7 +199,8 @@ df.head()
 ```python
 residuals = get_residuals(
     df,
-    x1_x2_columns_names=['x1', 'x2'],
+    x1_column_name='x1',
+    x2_column_name='x2',
     target_column_name='y'
 )
 ```
