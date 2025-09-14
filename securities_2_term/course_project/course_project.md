@@ -16,7 +16,7 @@ S0 = 100.0             # asset price
 T = 1.0                # time in years
 r = 0.02               # risk-free rate
 N = 252                # number of time steps in simulation
-M = 1000               # number of simulations
+M = 100               # number of simulations
 
 # Heston dependent parameters
 kappa = 3              # rate of mean reversion of variance under risk-neutral dynamics
@@ -24,16 +24,7 @@ theta = 0.20**2        # long-term mean of variance under risk-neutral dynamics
 v0 = 0.25**2           # initial variance under risk-neutral dynamics
 rho = 0.7              # correlation between returns and variances under risk-neutral dynamics
 sigma = 0.6            # volatility of volatility
-
-theta, v0
 ```
-
-
-
-
-    (0.04000000000000001, 0.0625)
-
-
 
 
 ```python
@@ -76,9 +67,7 @@ def heston_model_sim(S0, v0, rho, kappa, theta, sigma,T, N, M):
 
 ```python
 rho_p = 0.98
-rho_n = -0.98
 S_p,v_p = heston_model_sim(S0, v0, rho_p, kappa, theta, sigma,T, N, M)
-S_n,v_n = heston_model_sim(S0, v0, rho_n, kappa, theta, sigma,T, N, M)
 ```
 
 
@@ -101,31 +90,6 @@ plt.show()
 
     
 ![png](course_project_files/course_project_5_0.png)
-    
-
-
-
-```python
-# simulate gbm process at time T
-gbm = S0*np.exp( (r - theta**2/2)*T + np.sqrt(theta)*np.sqrt(T)*np.random.normal(0,1,M) )
-
-fig, ax = plt.subplots()
-
-ax = sns.kdeplot(S_p[-1], label=r"$\rho= 0.98$", ax=ax)
-ax = sns.kdeplot(S_n[-1], label=r"$\rho= -0.98$", ax=ax)
-ax = sns.kdeplot(gbm, label="GBM", ax=ax)
-
-plt.title(r'Asset Price Density under Heston Model')
-plt.xlim([20, 180])
-plt.xlabel('$S_T$')
-plt.ylabel('Density')
-plt.legend()
-plt.show()
-```
-
-
-    
-![png](course_project_files/course_project_6_0.png)
     
 
 
@@ -154,15 +118,57 @@ plt.legend()
 plt.show()
 ```
 
-    /home/eugene/miniconda3/lib/python3.12/site-packages/py_vollib_vectorized/implied_volatility.py:75: UserWarning: Found Below Intrinsic contracts at index [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
+    /home/eugene/miniconda3/lib/python3.12/site-packages/py_vollib_vectorized/implied_volatility.py:75: UserWarning: Found Below Intrinsic contracts at index [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
       below_intrinsic, above_max_price = _check_below_and_above_intrinsic(K, F, flag, undiscounted_option_price, on_error)
 
 
 
     
-![png](course_project_files/course_project_7_1.png)
+![png](course_project_files/course_project_6_1.png)
     
 
+
+
+```python
+def heston_portfolio_optimization(S, v, r, gamma, mu):
+    """
+    Оптимизация портфеля для модели Хестона с ежедневной ребалансировкой
+    
+    Параметры:
+    S - массив цен активов (размер: (n_steps+1, n_paths))
+    v - массив волатильностей (размер: (n_steps+1, n_paths))
+    r - безрисковая ставка (годовая)
+    gamma - коэффициент неприятия риска
+    mu - ожидаемая доходность рискового актива
+    
+    Возвращает:
+    weights - массив весов в рисковом активе
+    wealth - массив богатства портфеля
+    """
+    n_steps, n_paths = S.shape
+    dt = T / (n_steps - 1)
+    
+    # Инициализация массивов
+    weights = np.zeros((n_steps, n_paths))
+    wealth = np.ones((n_steps, n_paths)) * 100  # Начальное богатство = 100
+    
+    for t in range(n_steps - 1):
+        # Расчет логарифмической доходности
+        returns = (S[t+1] - S[t]) / S[t]
+        
+        # Оптимальный вес в рисковом активе (формула из теории)
+        w = ((mu - r) + 0.5 * v[t]) / (gamma * v[t])
+        
+        # Ограничение весов (0-100%)
+        w = np.clip(w, 0, 1)
+        weights[t] = w
+        
+        # Обновление богатства портфеля
+        portfolio_return = w * returns + (1 - w) * (r * dt)
+        wealth[t+1] = wealth[t] * (1 + portfolio_return)
+    
+    return weights, wealth
+```
 
 # Оптимизация портфеля в модели GARCH(1, 1)
 
@@ -180,7 +186,7 @@ from statsmodels.graphics.tsaplots import plot_pacf
 
 ```python
 # Создадим датасет
-n = 1000
+n = 252
 omega = 0.5
 
 alpha_1 = 0.1
@@ -226,13 +232,13 @@ plt.title('Симулированные данные для модели GARCH(1
 ```python
 plt.figure(figsize=(10,4))
 plt.plot(vols)
-plt.title('Стандартные отклонения симулированных данных', fontsize=20)
+plt.title('Волатильности симулированных данных', fontsize=20)
 ```
 
 
 
 
-    Text(0.5, 1.0, 'Стандартные отклонения симулированных данных')
+    Text(0.5, 1.0, 'Волатильности симулированных данных')
 
 
 
@@ -271,24 +277,23 @@ model = arch_model(train, p=1, q=1)
 
 
 ```python
-
 model_fit = model.fit()
 ```
 
-    Iteration:      1,   Func. Count:      6,   Neg. LLF: 3673.594349356084
-    Iteration:      2,   Func. Count:     13,   Neg. LLF: 2953.4004907499
-    Iteration:      3,   Func. Count:     19,   Neg. LLF: 234405532.81268573
-    Iteration:      4,   Func. Count:     25,   Neg. LLF: 1988.0519529618516
-    Iteration:      5,   Func. Count:     31,   Neg. LLF: 1978.703593131595
-    Iteration:      6,   Func. Count:     37,   Neg. LLF: 4832.959794748294
-    Iteration:      7,   Func. Count:     44,   Neg. LLF: 1978.505051901491
-    Iteration:      8,   Func. Count:     50,   Neg. LLF: 1978.0981586196604
-    Iteration:      9,   Func. Count:     56,   Neg. LLF: 1978.090902104047
-    Iteration:     10,   Func. Count:     61,   Neg. LLF: 1978.0909014159736
+    Iteration:      1,   Func. Count:      6,   Neg. LLF: 648.2241869764443
+    Iteration:      2,   Func. Count:     12,   Neg. LLF: 39698035.53553663
+    Iteration:      3,   Func. Count:     18,   Neg. LLF: 5907.978867975004
+    Iteration:      4,   Func. Count:     24,   Neg. LLF: 595.5202276242479
+    Iteration:      5,   Func. Count:     30,   Neg. LLF: 594.045326720928
+    Iteration:      6,   Func. Count:     36,   Neg. LLF: 593.7621737551883
+    Iteration:      7,   Func. Count:     42,   Neg. LLF: 593.7214490895251
+    Iteration:      8,   Func. Count:     47,   Neg. LLF: 593.7181635901957
+    Iteration:      9,   Func. Count:     52,   Neg. LLF: 593.7181557126348
+    Iteration:     10,   Func. Count:     56,   Neg. LLF: 593.7181557127853
     Optimization terminated successfully    (Exit mode 0)
-                Current function value: 1978.0909014159736
+                Current function value: 593.7181557126348
                 Iterations: 10
-                Function evaluations: 61
+                Function evaluations: 56
                 Gradient evaluations: 10
 
 
@@ -309,79 +314,52 @@ model_fit.summary()
   <th>Mean Model:</th>       <td>Constant Mean</td>   <th>  Adj. R-squared:    </th>  <td>   0.000</td> 
 </tr>
 <tr>
-  <th>Vol Model:</th>            <td>GARCH</td>       <th>  Log-Likelihood:    </th> <td>  -1978.09</td>
+  <th>Vol Model:</th>            <td>GARCH</td>       <th>  Log-Likelihood:    </th> <td>  -593.718</td>
 </tr>
 <tr>
-  <th>Distribution:</th>        <td>Normal</td>       <th>  AIC:               </th> <td>   3964.18</td>
+  <th>Distribution:</th>        <td>Normal</td>       <th>  AIC:               </th> <td>   1195.44</td>
 </tr>
 <tr>
-  <th>Method:</th>        <td>Maximum Likelihood</td> <th>  BIC:               </th> <td>   3982.67</td>
+  <th>Method:</th>        <td>Maximum Likelihood</td> <th>  BIC:               </th> <td>   1208.45</td>
 </tr>
 <tr>
-  <th></th>                        <td></td>          <th>  No. Observations:  </th>     <td>752</td>   
+  <th></th>                        <td></td>          <th>  No. Observations:  </th>     <td>191</td>   
 </tr>
 <tr>
-  <th>Date:</th>           <td>Sat, Jun 14 2025</td>  <th>  Df Residuals:      </th>     <td>751</td>   
+  <th>Date:</th>           <td>Sun, Sep 14 2025</td>  <th>  Df Residuals:      </th>     <td>190</td>   
 </tr>
 <tr>
-  <th>Time:</th>               <td>21:02:44</td>      <th>  Df Model:          </th>      <td>1</td>    
+  <th>Time:</th>               <td>18:02:59</td>      <th>  Df Model:          </th>      <td>1</td>    
 </tr>
 </table>
 <table class="simpletable">
 <caption>Mean Model</caption>
 <tr>
-   <td></td>     <th>coef</th>     <th>std err</th>      <th>t</th>       <th>P>|t|</th>     <th>95.0% Conf. Int.</th>  
+   <td></td>     <th>coef</th>     <th>std err</th>      <th>t</th>       <th>P>|t|</th>   <th>95.0% Conf. Int.</th> 
 </tr>
 <tr>
-  <th>mu</th> <td>    0.1515</td> <td>9.859e-02</td> <td>    1.537</td> <td>    0.124</td> <td>[-4.168e-02,  0.345]</td>
+  <th>mu</th> <td>    0.1093</td> <td>    0.322</td> <td>    0.339</td> <td>    0.734</td> <td>[ -0.522,  0.741]</td>
 </tr>
 </table>
 <table class="simpletable">
 <caption>Volatility Model</caption>
 <tr>
-      <td></td>        <th>coef</th>     <th>std err</th>      <th>t</th>       <th>P>|t|</th>    <th>95.0% Conf. Int.</th>  
+      <td></td>        <th>coef</th>     <th>std err</th>      <th>t</th>       <th>P>|t|</th>     <th>95.0% Conf. Int.</th>  
 </tr>
 <tr>
-  <th>omega</th>    <td>    0.2486</td> <td>9.099e-02</td> <td>    2.732</td> <td>6.289e-03</td> <td>[7.027e-02,  0.427]</td>
+  <th>omega</th>    <td>    0.6321</td> <td>    0.338</td> <td>    1.871</td> <td>6.135e-02</td> <td>[-3.006e-02,  1.294]</td>
 </tr>
 <tr>
-  <th>alpha[1]</th> <td>    0.1354</td> <td>2.207e-02</td> <td>    6.133</td> <td>8.625e-10</td> <td>[9.211e-02,  0.179]</td>
+  <th>alpha[1]</th> <td>    0.1479</td> <td>3.226e-02</td> <td>    4.585</td> <td>4.529e-06</td>  <td>[8.471e-02,  0.211]</td>
 </tr>
 <tr>
-  <th>beta[1]</th>  <td>    0.8536</td> <td>1.871e-02</td> <td>   45.611</td>   <td>0.000</td>    <td>[  0.817,  0.890]</td> 
+  <th>beta[1]</th>  <td>    0.8402</td> <td>2.178e-02</td> <td>   38.577</td>   <td>0.000</td>     <td>[  0.798,  0.883]</td> 
 </tr>
 </table><br/><br/>Covariance estimator: robust
 
 
 
-#### Сделаем предсказания для тестовой выборки и сравним графики волатильности
-
-
-```python
-predictions = model_fit.forecast(horizon=test_size)
-```
-
-
-```python
-plt.figure(figsize=(10,4))
-true, = plt.plot(vols[-test_size:])
-preds, = plt.plot(np.sqrt(predictions.variance.values[-1, :]))
-plt.title('Предсказание волатильности для тестовой выборки', fontsize=20)
-plt.legend(['Истинная волатильность', 'Предсказанная волатильность'], fontsize=16)
-```
-
-
-
-
-    <matplotlib.legend.Legend at 0x7603c52d8ce0>
-
-
-
-
-    
-![png](course_project_files/course_project_23_1.png)
-    
-
+#### Сделаем предсказания волатильности для тестовой выборки скользящим окном
 
 
 ```python
@@ -406,12 +384,185 @@ plt.legend(['Истинная волатильность', 'Предсказан
 
 
 
-    <matplotlib.legend.Legend at 0x7603c993e0f0>
+    <matplotlib.legend.Legend at 0x72de8ef76960>
 
 
 
 
     
-![png](course_project_files/course_project_25_1.png)
+![png](course_project_files/course_project_23_1.png)
     
 
+
+
+```python
+def garch_portfolio_optimization(returns, r, gamma, mu, p=1, q=1):
+    """
+    Оптимизация портфеля для модели GARCH(1,1) с ежедневной ребалансировкой
+    
+    Параметры: 
+    returns - массив исторических доходностей
+    r - безрисковая ставка (годовая)
+    gamma - коэффициент неприятия риска
+    mu - ожидаемая доходность рискового актива
+    p, q - параметры GARCH модели
+    
+    Возвращает:
+    weights - массив весов в рисковом активе
+    wealth - массив богатства портфеля
+    """
+    n = len(returns)
+    test_size = int(n * 0.25)  # 25% данных для тестирования
+    train_size = n - test_size
+    
+    # Инициализация массивов
+    weights = np.zeros(n)
+    wealth = np.ones(n) * 100
+    
+    # Скользящее окно прогнозирования
+    for i in range(train_size, n):
+        # Обучаем модель на данных до текущего момента
+        train = returns[:i]
+        model = arch_model(train, p=p, q=q)
+        model_fit = model.fit(disp='off')
+        
+        # Прогноз волатильности на следующий период
+        forecast = model_fit.forecast(horizon=1)
+        sigma2 = forecast.variance.values[-1, 0]
+        
+        # Оптимальный вес в рисковом активе
+        w = ((mu - r) + 0.5 * sigma2) / (gamma * sigma2)
+        
+        # Ограничение весов (0-100%)
+        w = np.clip(w, 0, 1)
+        weights[i] = w
+        
+        # Обновление богатства портфеля
+        portfolio_return = w * returns[i] + (1 - w) * (r / 252)
+        wealth[i] = wealth[i-1] * (1 + portfolio_return)
+    
+    return weights, wealth
+```
+
+# Сравнение стратегий
+
+Реализуем функцию для сравнения эффективности двух стратегий по критерию ожидаемой полезности
+
+
+```python
+def compare_strategies(S_heston, v_heston, returns_garch, r, gamma, mu):
+    """Сравнение стратегий для Heston и GARCH моделей"""
+    # Оптимизация для Heston
+    weights_heston, wealth_heston = heston_portfolio_optimization(
+        S_heston, v_heston, r, gamma, mu
+    )
+    
+    # Оптимизация для GARCH
+    weights_garch, wealth_garch = garch_portfolio_optimization(
+        returns_garch, r, gamma, mu
+    )
+    
+    # Расчет полезности (CRRA)
+    def crra_utility(wealth, gamma):
+        if gamma == 1:
+            return np.log(wealth)
+        return wealth**(1 - gamma) / (1 - gamma)
+    
+    # Усредненная полезность для Heston
+    utility_heston = np.mean(crra_utility(wealth_heston[-1], gamma))
+    
+    # Полезность для GARCH (одна траектория)
+    utility_garch = crra_utility(wealth_garch[-1], gamma)
+    
+    # Визуализация результатов
+    plt.figure(figsize=(14, 10))
+    
+    # График богатства
+    plt.subplot(221)
+    plt.plot(wealth_heston.mean(axis=1), label='Heston (mean)')
+    plt.plot(wealth_heston[:, :5], alpha=0.3)
+    plt.title('Богатство портфеля (Heston)')
+    plt.xlabel('Дни')
+    plt.ylabel('Богатство')
+    plt.grid(True)
+    
+    plt.subplot(222)
+    plt.plot(wealth_garch)
+    plt.title('Богатство портфеля (GARCH)')
+    plt.xlabel('Дни')
+    plt.ylabel('Богатство')
+    plt.grid(True)
+    
+    # График весов
+    plt.subplot(223)
+    plt.plot(weights_heston.mean(axis=1), label='Mean weight')
+    plt.title('Доля в рисковом активе (Heston)')
+    plt.xlabel('Дни')
+    plt.ylabel('Доля')
+    plt.grid(True)
+    
+    plt.subplot(224)
+    plt.plot(weights_garch)
+    plt.title('Доля в рисковом активе (GARCH)')
+    plt.xlabel('Дни')
+    plt.ylabel('Доля')
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return {
+        'weights_heston': weights_heston,
+        'wealth_heston': wealth_heston,
+        'weights_garch': weights_garch,
+        'wealth_garch': wealth_garch,
+        'utility_heston': utility_heston,
+        'utility_garch': utility_garch
+    }
+```
+
+
+```python
+# Параметры для Heston модели
+S0 = 100.0
+T = 1.0
+r = 0.02
+N = 252
+M = 1000
+kappa = 3
+theta = 0.20**2
+v0 = 0.25**2
+rho = -0.7
+sigma = 0.6
+
+# Генерация данных для Heston
+S_heston, v_heston = heston_model_sim(S0, v0, rho, kappa, theta, sigma, T, N, M)
+
+# Параметры для GARCH модели
+returns_garch = series  # Здесь должны быть исторические данные доходностей
+
+# Параметры оптимизации
+gamma = 4  # Коэффициент неприятия риска
+mu = 0.08  # Ожидаемая годовая доходность
+```
+
+
+```python
+# Сравнение стратегий
+results = compare_strategies(S_heston, v_heston, returns_garch, r, gamma, mu)
+```
+
+    /tmp/ipykernel_15641/1495680783.py:28: RuntimeWarning: divide by zero encountered in divide
+      w = ((mu - r) + 0.5 * v[t]) / (gamma * v[t])
+
+
+
+    
+![png](course_project_files/course_project_28_1.png)
+    
+
+
+
+```python
+
+```
